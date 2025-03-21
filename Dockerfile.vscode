@@ -1,0 +1,88 @@
+# Usar uma imagem oficial do Ubuntu 22.04
+FROM ubuntu:22.04
+
+# Definir o ambiente como não interativo para evitar prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+
+# Atualiza pacotes e instala SSH, Python 3.11 e dependências
+RUN apt-get update -y && apt-get install -y \
+    openssh-server \
+    python3.11 \
+    python3-pip \
+    sudo \
+    curl \
+    wget \
+    default-jdk \
+    curl \
+    mlocate \
+    git \
+    scala \
+    && apt-get clean
+
+# Instala o Apche Spark 3.3.1
+RUN curl -O https://ftp.unicamp.br/pub/apache/spark/spark-3.3.1/spark-3.3.1-bin-hadoop3-scala2.13.tgz
+RUN tar xvf spark-3.3.1-bin-hadoop3-scala2.13.tgz
+RUN mkdir /opt/spark
+RUN mv spark-3.3.1-bin-hadoop3-scala2.13/* /opt/spark
+RUN chmod -R 777 /opt/spark
+RUN echo "export SPARK_HOME=/opt/spark" >> ~/.bashrc && \
+    echo "export PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin" >> ~/.bashrc
+COPY ./setup/spark/hive-site.xml /opt/spark/conf/hive-site.xml
+COPY ./setup/spark/spark-defaults.conf /opt/spark/conf/
+
+RUN wget -P /opt/spark/jars/ https://jdbc.postgresql.org/download/postgresql-42.7.5.jar
+RUN wget -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.1/hadoop-aws-3.3.1.jar
+RUN wget -P /opt/spark/jars/ https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.782/aws-java-sdk-bundle-1.12.782.jar
+
+# Configurando o Hive Metastore
+RUN curl -O https://dlcdn.apache.org/hive/hive-standalone-metastore-3.0.0/hive-standalone-metastore-3.0.0-bin.tar.gz
+RUN tar xvf hive-standalone-metastore-3.0.0-bin.tar.gz
+RUN mkdir /opt/hive
+RUN mv apache-hive-metastore-3.0.0-bin/* /opt/hive
+RUN export HIVE_HOME=/opt/hive
+RUN export PATH=$PATH:$HIVE_HOME/bin
+
+# Instala o PySpark e bibliotecas de dados
+RUN pip install --no-cache-dir \
+    pyspark==3.3.1 \
+    pandas \
+    numpy \
+    findspark \
+    load_dotenv \
+    s3fs
+
+# Garante que o SSH está rodando
+RUN mkdir -p /run/sshd
+
+# Definir o usuário e senha
+ENV USERNAME=usr_vscode
+ENV PASSWORD=1234
+
+# Criar o usuário e configurar a senha
+RUN useradd -m -s /bin/bash $USERNAME && \
+    echo "$USERNAME:$PASSWORD" | chpasswd && \
+    usermod -aG sudo $USERNAME
+
+# Cria diretório SSH e define permissões corretas
+RUN mkdir -p /home/$USERNAME/.ssh
+RUN chmod 700 /home/$USERNAME/.ssh
+RUN chown $USERNAME:$USERNAME /home/$USERNAME/.ssh
+
+# Instalar o VS Code Server
+RUN mkdir -p /home/$USERNAME/.vscode-server && \
+    chown -R $USERNAME:$USERNAME /home/$USERNAME/.vscode-server
+
+# Baixa e instala o code-server
+RUN curl -fsSL https://code-server.dev/install.sh | sh
+# Expõe as portas necessárias
+EXPOSE 8080 22 7077 8081
+
+WORKDIR /home/$USERNAME
+
+# Copia um script de inicialização
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Define o script de inicialização como entrypoint
+ENTRYPOINT ["/start.sh"]
