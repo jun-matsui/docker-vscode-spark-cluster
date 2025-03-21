@@ -1,0 +1,64 @@
+services:
+  # Serviço: Visual Studio Code Server e Apache Spark 
+  vscode-master:
+    build:
+      context: .
+      dockerfile: Dockerfile.vscode
+    container_name: vscode-master
+    restart: unless-stopped
+    networks:
+      - bigdata_network
+    ports:
+      - "8080:8080"  # Porta do VS Code Server
+      - "22:22"      # Porta do SSH
+      - "7077:7077"
+      - "8081:8081"
+    volumes:
+      - ./code-server-data:/home/usr_vscode
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_EXEC=/opt/spark/sbin/start-master.sh
+      - SPARK_WORKER_EXEC=/opt/spark/sbin/start-slave.sh spark://vscode-master:7077
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Sao_Paulo
+      - PASSWORD=1234 #optional
+      - HASHED_PASSWORD= #optional
+      - SUDO_PASSWORD=1234 #optional
+      - SUDO_PASSWORD_HASH= #optional
+      - PROXY_DOMAIN=code-server.my.domain #optional
+      - DEFAULT_WORKSPACE=/config/workspace #optional
+      - SPARK_HOME=/opt/spark
+      - PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+      - HADOOP_HOME=/opt/spark
+
+  vscode-worker-01:
+    build:
+      context: .
+      dockerfile: Dockerfile.vscode
+    container_name: vscode-worker-01
+    restart: unless-stopped
+    networks:
+      - bigdata_network
+    environment:
+      - SPARK_MODE=slave
+      - SPARK_MODE_EXEC=/opt/spark/sbin/start-slave.sh spark://vscode-master:7077
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Sao_Paulo
+      - PASSWORD=1234 #optional
+      - HASHED_PASSWORD= #optional
+      - SUDO_PASSWORD=1234 #optional
+      - SUDO_PASSWORD_HASH= #optional
+      - PROXY_DOMAIN=code-server.my.domain #optional
+      - DEFAULT_WORKSPACE=/config/workspace #optional
+      - SPARK_HOME=/opt/spark
+      - PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+    depends_on:
+      - vscode-master
+
+# Rede para comunicação entre os serviços
+networks:
+  bigdata_network:
+    driver: bridge
+    
